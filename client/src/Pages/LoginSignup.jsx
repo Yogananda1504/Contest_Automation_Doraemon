@@ -3,10 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff } from 'react-feather';
 import axios from 'axios';
 
+const API_BASE_URL = 'http://localhost:4000'; // Update this to your actual backend URL
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+});
+
 const LoadingSpinner = () => (
-  <div className='flex flex-col  justify-content-center align-items-center '>
+  <div className='flex flex-col justify-content-center align-items-center'>
     <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
-    <div className="Loader text-lg font-bold text-indigo-500 mt-1 text-center">Chill h 😂</div>
+    <div className="Loader text-lg font-bold text-indigo-500 mt-1 text-center">Loading...</div>
   </div>
 );
 
@@ -16,6 +27,7 @@ function LoginSignup() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingPage, setLoadingPage] = useState(true);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -31,12 +43,13 @@ function LoginSignup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
-    const url = isLogin ? '/api/login' : '/api/signup';
+    setError('');
+    
+    const url = isLogin ? '/auth/login' : '/auth/register';
     const data = { username: e.target.username.value, password: e.target.password.value };
 
     try {
-      const response = await axios.post(url, data);
+      const response = await api.post(url, data);
       const token = response.data.token;
 
       if (rememberMe) {
@@ -48,6 +61,13 @@ function LoginSignup() {
       navigate('/home');
     } catch (error) {
       console.error('Error during authentication', error);
+      if (error.response) {
+        setError(error.response.data.message || 'An error occurred during authentication');
+      } else if (error.request) {
+        setError('No response received from the server. Please check your internet connection and try again.');
+      } else {
+        setError('An unexpected error occurred. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }
@@ -67,6 +87,11 @@ function LoginSignup() {
         <h2 className="text-3xl font-extrabold text-center mb-8 text-indigo-700">
           {isLogin ? 'Welcome Back!' : 'Join Us'}
         </h2>
+        {error && (
+          <div className="mb-4 p-2 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
