@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Eye, EyeOff } from 'react-feather';
+import { User, Lock, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:4000'; // Update this to your actual backend URL
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -15,13 +14,25 @@ const api = axios.create({
 });
 
 const LoadingSpinner = () => (
-  <div className='flex flex-col justify-content-center align-items-center'>
-    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
-    <div className="Loader text-lg font-bold text-indigo-500 mt-1 text-center">Loading...</div>
+  <div className='flex justify-center items-center'>
+    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-500"></div>
   </div>
 );
 
-function LoginSignup() {
+const Alert = ({ message, onClose }) => (
+  <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+    <strong className="font-bold">Error: </strong>
+    <span className="block sm:inline">{message}</span>
+    <span className="absolute top-0 bottom-0 right-0 px-4 py-3" onClick={onClose}>
+      <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+        <title>Close</title>
+        <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/>
+      </svg>
+    </span>
+  </div>
+);
+
+export default function LoginSignup() {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -45,8 +56,8 @@ function LoginSignup() {
     setLoading(true);
     setError('');
     
-    const url = isLogin ? '/auth/login' : '/auth/register';
-    const data = { username: e.target.username.value, password: e.target.password.value };
+    const url = isLogin ? '/api/auth/login' : '/api/auth/register';
+    const data = { username: e.target.username.value.trim(), password: e.target.password.value.trim() };
 
     try {
       const response = await api.post(url, data);
@@ -87,11 +98,7 @@ function LoginSignup() {
         <h2 className="text-3xl font-extrabold text-center mb-8 text-indigo-700">
           {isLogin ? 'Welcome Back!' : 'Join Us'}
         </h2>
-        {error && (
-          <div className="mb-4 p-2 bg-red-100 border border-red-400 text-red-700 rounded">
-            {error}
-          </div>
-        )}
+        {error && <Alert message={error} onClose={() => setError('')} />}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
@@ -163,7 +170,7 @@ function LoginSignup() {
               className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out"
               disabled={loading}
             >
-              {loading ? <LoadingSpinner /> : isLogin ? 'Sign In' : 'Create Account'}
+              {loading ? <LoadingSpinner /> : (isLogin ? 'Sign In' : 'Create Account')}
             </button>
           </div>
         </form>
@@ -180,5 +187,3 @@ function LoginSignup() {
     </div>
   );
 }
-
-export default LoginSignup;

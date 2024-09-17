@@ -14,14 +14,15 @@ connectDB();
 
 // Middleware
 app.use(cors({
-  origin: 'https://turbo-meme-x5rrr57q7gwc6g9r-5173.app.github.dev' ,
+  origin: 'http://localhost:5173' ,
+  
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
 app.use(express.json());
 
 
 // Routes
-app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
 // Error Handler
