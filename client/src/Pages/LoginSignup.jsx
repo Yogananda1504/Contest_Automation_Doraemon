@@ -26,7 +26,7 @@ const Alert = ({ message, onClose }) => (
     <span className="absolute top-0 bottom-0 right-0 px-4 py-3" onClick={onClose}>
       <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
         <title>Close</title>
-        <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/>
+        <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z" />
       </svg>
     </span>
   </div>
@@ -51,13 +51,28 @@ export default function LoginSignup() {
   const toggleForm = () => setIsLogin(!isLogin);
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
 
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (token) {
+        navigate('/home');
+      } else {
+        setLoadingPage(false);
+      }
+    };
+
+    checkAuth();
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     const url = isLogin ? '/api/auth/login' : '/api/auth/register';
-    const data = { username: e.target.username.value.trim(), password: e.target.password.value.trim() };
+    const username = e.target.username.value.trim();
+    const password = e.target.password.value;
+    const data = { username, password };
 
     try {
       const response = await api.post(url, data);
@@ -71,11 +86,8 @@ export default function LoginSignup() {
 
       navigate('/home');
     } catch (error) {
-      console.error('Error during authentication', error);
       if (error.response) {
         setError(error.response.data.message || 'An error occurred during authentication');
-      } else if (error.request) {
-        setError('No response received from the server. Please check your internet connection and try again.');
       } else {
         setError('An unexpected error occurred. Please try again later.');
       }
@@ -94,16 +106,13 @@ export default function LoginSignup() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        <h2 className="text-3xl font-extrabold text-center mb-8 text-indigo-700">
-          {isLogin ? 'Welcome Back!' : 'Join Us'}
-        </h2>
+      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+        <h1 className="text-4xl font-bold text-indigo-700 text-center mb-6">{isLogin ? 'Welcome Back!' : 'Join Us'}</h1>
         {error && <Alert message={error} onClose={() => setError('')} />}
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Username Field */}
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-              Username
-            </label>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">Username</label>
             <div className="relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <User className="h-5 w-5 text-indigo-500" />
@@ -119,10 +128,9 @@ export default function LoginSignup() {
             </div>
           </div>
 
+          {/* Password Field */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <div className="relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Lock className="h-5 w-5 text-indigo-500" />
@@ -135,35 +143,29 @@ export default function LoginSignup() {
                 placeholder="Enter your password"
                 required
               />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                <button
-                  type="button"
-                  onClick={togglePasswordVisibility}
-                  className="focus:outline-none text-indigo-500 hover:text-indigo-600"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={togglePasswordVisibility}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5 text-indigo-500" /> : <Eye className="h-5 w-5 text-indigo-500" />}
+              </button>
             </div>
           </div>
 
+          {/* Remember Me Toggle */}
           <div className="flex items-center">
             <input
               type="checkbox"
               id="rememberMe"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
             />
-            <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-700">
-              Remember me
-            </label>
+            <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-700">Remember me</label>
           </div>
 
+          {/* Submit Button */}
           <div>
             <button
               type="submit"
@@ -175,6 +177,7 @@ export default function LoginSignup() {
           </div>
         </form>
 
+        {/* Toggle Form Button */}
         <div className="mt-6 text-center">
           <button
             onClick={toggleForm}

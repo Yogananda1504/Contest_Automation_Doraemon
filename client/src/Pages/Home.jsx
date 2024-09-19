@@ -1,45 +1,124 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { Container, Row, Col, Nav, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Nav, Button, Navbar, Form, Alert, Offcanvas } from 'react-bootstrap';
+import { Menu } from 'lucide-react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
+const API_BASE_URL = 'http://localhost:4000'; // Update this to your actual backend URL
+
 const LoadingSpinner = () => (
-  <div className="d-flex justify-content-center align-items-center">
-    <div className="spinner-border text-primary" role="status">
-      <span className="visually-hidden">Loading...</span>
-    </div>
+  <div className="spinner-border text-primary" role="status">
+    <span className="visually-hidden">Loading...</span>
   </div>
 );
 
 const Home = () => {
-  const [handle, setHandle] = useState('');
-  const [password, setPassword] = useState('');
+  const [credentials, setCredentials] = useState({
+    handle: localStorage.getItem('handle') || '',
+    password: localStorage.getItem('password') || '',
+    APIkey: localStorage.getItem('APIkey') || ''
+  });
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loadingPage, setLoadingPage] = useState(true);
-  const [activeTab, setActiveTab] = useState('credentials');
+  const [activeTab, setActiveTab] = useState(sessionStorage.getItem('activeTab') || 'credentials');
   const [profileData, setProfileData] = useState(null);
-  const [hasToken, setHasToken] = useState(false);
+  const [hasToken, setHasToken] = useState(!!(localStorage.getItem('token') || sessionStorage.getItem('token')));
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [selectedDivisions, setSelectedDivisions] = useState(localStorage.getItem('selectedDivisions') ? JSON.parse(localStorage.getItem('selectedDivisions')) : []);
+  const [isAutomated, setIsAutomated] = useState(false);
+  const [automationPeriod, setAutomationPeriod] = useState(localStorage.getItem('automationPeriod') || '');
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
-        setErrorMessage('You must be logged in to access this page.');
-        setHasToken(false);
-      } else {
-        setHasToken(true);
-      }
-      setLoadingPage(false);
-    }, 1000);
-    return () => clearTimeout(timer);
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    setHasToken(!!token);
+
+    // Load saved credentials
+    const savedCredentials = JSON.parse(localStorage.getItem('cfCredentials') || '{}');
+    setCredentials(prevCredentials => ({
+      ...prevCredentials,
+      ...savedCredentials
+    }));
+
+    // Load saved active tab from session storage
+    const savedTab = sessionStorage.getItem('activeTab') || 'credentials';
+    setActiveTab(savedTab);
+
+    setLoadingPage(false);
+
+    // Fetch profile data if credentials are available
+    if (savedCredentials.handle) {
+      handleFetchProfile(savedCredentials.handle);
+    }
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
+  const handleAutomation = async (automate) => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const response = await axios.post(
+        `${API_BASE_URL}/api/users/${automate ? 'automate' : 'stop-automation'}`,
+        { automationPeriod, selectedDivisions },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setSuccessMessage(response.data.message);
+      setIsAutomated(automate); // Toggle automation state
+    } catch (error) {
+      setErrorMessage(error.response?.data?.message || 'An error occurred during automation.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setCredentials(prevCredentials => ({
+      ...prevCredentials,
+      [name]: value
+    }));
+    localStorage.setItem(`${name}`, value);
+  };
+
+  const handleDivisionChange = (division) => {
+    const updatedDivisions = selectedDivisions.includes(division)
+      ? selectedDivisions.filter(d => d !== division)
+      : [...selectedDivisions, division];
+    setSelectedDivisions(updatedDivisions);
+    localStorage.setItem('selectedDivisions', JSON.stringify(updatedDivisions));
+  };
+
+  const handlePeriodChange = (e) => {
+    setAutomationPeriod(e.target.value);
+    localStorage.setItem('automationPeriod', e.target.value);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+    localStorage.removeItem('cfCredentials');
+    sessionStorage.removeItem('activeTab');
+    localStorage.removeItem('selectedDivisions');
+    localStorage.removeItem('automationPeriod');
+    navigate('/');
+  };
 
   const handleSubmitCredentials = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
 
     if (!hasToken) {
       setErrorMessage('You must be logged in to access this page.');
@@ -48,39 +127,47 @@ const Home = () => {
     }
 
     try {
-      console.log('Submitted:', { handle, password });
-      const isValid = handle && password;
-      if (!isValid) {
-        setErrorMessage('Please enter valid credentials.');
-      } else {
-        setErrorMessage('');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const response = await axios.put(
+        `${API_BASE_URL}/api/users/profile`,
+        credentials,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data) {
+        setSuccessMessage('Profile updated successfully');
+        localStorage.setItem('cfCredentials', JSON.stringify(credentials));
+        await handleFetchProfile(credentials.handle);
+        setActiveTab('profile'); // Switch to profile tab after successful update
       }
     } catch (error) {
-      console.error('Error submitting data', error);
-      setErrorMessage('An error occurred while validating credentials. Please try again.');
+      setErrorMessage(error.response?.data?.message || 'An error occurred while updating credentials. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFetchProfile = async () => {
-    if (!hasToken || handle.trim() === '') {
-      setErrorMessage('Enter valid credentials first.');
+  const handleFetchProfile = async (handle) => {
+    if (!hasToken) {
+      setErrorMessage('You must be logged in to fetch profile data.');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await axios.get(`https://codeforces.com/api/user.info?handles=${handle}`);
-      if (response.data.status === 'OK' && response.data.result.length > 0) {
-        setProfileData(response.data.result[0]);
+      const cfResponse = await axios.get(`https://codeforces.com/api/user.info?handles=${handle}`);
+      if (cfResponse.data.status === 'OK' && cfResponse.data.result.length > 0) {
+        setProfileData(cfResponse.data.result[0]);
         setErrorMessage('');
       } else {
-        setErrorMessage('Invalid username. Please enter a valid Codeforces handle.');
+        setErrorMessage('Invalid Codeforces handle. Please update your profile with a valid handle.');
       }
     } catch (error) {
-      console.error('Error fetching profile data', error);
       setErrorMessage('An error occurred while fetching profile data.');
     } finally {
       setLoading(false);
@@ -88,132 +175,200 @@ const Home = () => {
   };
 
   if (loadingPage) {
-    return <LoadingSpinner />;
+    return (
+      <Container className="d-flex justify-content-center align-items-center vh-100">
+        <LoadingSpinner />
+      </Container>
+    );
   }
 
   if (!hasToken) {
     return (
       <Container className="mt-5">
         <Alert variant="danger">
-          You must be logged in to access this page. 
-          <Link to="/" className="ml-2">Go back to home page</Link>
+          You must be logged in to access this page.
+          <Link to="/" className="ms-2">Go back to home page</Link>
         </Alert>
       </Container>
     );
   }
 
   return (
-    <Container fluid>
-      <Row>
-        <Col md={3} className="bg-light sidebar">
-          <Nav className="flex-column">
-            <Nav.Item>
-              <Nav.Link 
-                onClick={() => setActiveTab('credentials')}
+    <div className="d-flex flex-column min-vh-100">
+      <Navbar bg="dark" variant="dark" className="mb-4">
+        <Container fluid>
+          <Button
+            variant="outline-light"
+            className="me-2"
+            onClick={() => setShowSidebar(true)}
+          >
+            <Menu size={24} />
+          </Button>
+          <Navbar.Brand href="#home">Codeforces Auto Register</Navbar.Brand>
+          <Button variant="outline-light" onClick={handleLogout}>Logout</Button>
+        </Container>
+      </Navbar>
+
+      <Container className="flex-grow-1">
+        {activeTab === 'credentials' && (
+          <Row className="justify-content-md-center">
+            <Col md={6}>
+              <h2 className="mb-4">Enter Credentials</h2>
+              <Form onSubmit={handleSubmitCredentials}>
+                <Form.Group className="mb-3" controlId="handle">
+                  <Form.Label>Codeforces Handle</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="handle"
+                    placeholder="Enter your Codeforces handle"
+                    value={credentials.handle}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3" controlId="password">
+                  <Form.Label>Codeforces Password</Form.Label>
+                  <Form.Control
+                    type="password"
+                    name="password"
+                    placeholder="Enter your Password"
+                    value={credentials.password}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3" controlId="APIkey">
+                  <Form.Label>Codeforces API Key</Form.Label>
+                  <Form.Control
+                    type="password"
+                    name="APIkey"
+                    placeholder="Enter your API key"
+                    value={credentials.APIkey}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Form.Group>
+
+                <Button variant="primary" type="submit" disabled={loading}>
+                  {loading ? <LoadingSpinner /> : 'Update'}
+                </Button>
+              </Form>
+            </Col>
+          </Row>
+        )}
+
+        {activeTab === 'profile' && (
+          <Row>
+            <Col md={6}>
+              <h2 className="mb-4">Profile Information</h2>
+              {profileData ? (
+                <>
+                  <img src={profileData.avatar} alt={`${profileData.handle}'s avatar`} className="img-thumbnail mb-3" style={{ width: '100px' }} />
+                  <p><strong>Handle:</strong> {profileData.handle}</p>
+                  <p><strong>Last Name:</strong> {profileData.lastName}</p>
+                  <p><strong>Rating:</strong> {profileData.rating}</p>
+                  <p><strong>Rank:</strong> {profileData.rank}</p>
+                  <p><strong>Max Rating:</strong> {profileData.maxRating}</p>
+                  <p><strong>Friends Count:</strong> {profileData.friendOfCount}</p>
+                </>
+              ) : (
+                <Alert variant="info">
+                  No profile data available. Please enter valid credentials in the Credentials section and update your profile.
+                </Alert>
+              )}
+            </Col>
+          </Row>
+        )}
+
+        {activeTab === 'settings' && (
+          <Row>
+            <Col md={6}>
+              <h2 className="mb-4">Settings</h2>
+              <Form>
+                <Form.Group className="mb-3">
+                  <Form.Label>Contest Divisions</Form.Label>
+                  {['Div. 1', 'Div. 2', 'Div. 3', 'Div. 4'].map((div) => (
+                    <Form.Check
+                      type="checkbox"
+                      id={`division-${div}`}
+                      label={`${div} ${div === 'Div. 1' ? '(2100+)' :
+                        div === 'Div. 2' ? '(<2100)' :
+                          div === 'Div. 3' ? '(<1600)' : '(<1400)'}`}
+                      checked={selectedDivisions.includes(div)}
+                      onChange={() => handleDivisionChange(div)}
+                      key={div}
+                    />
+                  ))}
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Automation Period</Form.Label>
+                  <Form.Select
+                    value={automationPeriod}
+                    onChange={handlePeriodChange}
+                  >
+                    <option value="">Select Period</option>
+                    <option value="daily">Daily</option>
+                    <option value="twice-daily">Twice Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </Form.Select>
+                </Form.Group>
+                <Button
+                  variant="primary"
+                  onClick={() => handleAutomation(!isAutomated)}
+                >
+                  {isAutomated ? 'Stop Automation' : 'Start Automation'}
+                </Button>
+              </Form>
+            </Col>
+          </Row>
+        )}
+
+        <Offcanvas
+          show={showSidebar}
+          onHide={() => setShowSidebar(false)}
+          placement="start"
+        >
+          <Offcanvas.Header closeButton>
+            <Offcanvas.Title>Menu</Offcanvas.Title>
+          </Offcanvas.Header>
+          <Offcanvas.Body>
+            <Nav className="flex-column">
+              <Nav.Link
                 active={activeTab === 'credentials'}
+                onClick={() => setActiveTab('credentials')}
               >
                 Credentials
               </Nav.Link>
-            </Nav.Item>
-            <Nav.Item>
-              <Nav.Link 
-                onClick={() => {
-                  setActiveTab('profile');
-                  handleFetchProfile();
-                }}
+              <Nav.Link
                 active={activeTab === 'profile'}
+                onClick={() => setActiveTab('profile')}
               >
                 Profile
               </Nav.Link>
-            </Nav.Item>
-            <Nav.Item>
-              <Nav.Link 
-                onClick={() => setActiveTab('settings')}
+              <Nav.Link
                 active={activeTab === 'settings'}
+                onClick={() => setActiveTab('settings')}
               >
                 Settings
               </Nav.Link>
-            </Nav.Item>
-          </Nav>
-        </Col>
-        <Col md={9}>
-          <header className="bg-white shadow">
-            <Container>
-              <Row className="py-4">
-                <Col>
-                  <h1 className="h3">Codeforces Auto Register</h1>
-                </Col>
-                <Col className="text-right">
-                  <Link to="/" className="btn btn-link">Logout</Link>
-                </Col>
-              </Row>
-            </Container>
-          </header>
+            </Nav>
+          </Offcanvas.Body>
+        </Offcanvas>
+      </Container>
 
-          <main className="mt-4">
-            {activeTab === 'credentials' && (
-              <form onSubmit={handleSubmitCredentials}>
-                <div className="mb-3">
-                  <label htmlFor="handle" className="form-label">Codeforces Handle</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    id="handle"
-                    value={handle}
-                    onChange={(e) => setHandle(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="mb-3">
-                  <label htmlFor="password" className="form-label">Codeforces API Key</label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? <LoadingSpinner /> : 'Validate'}
-                </button>
-              </form>
-            )}
-
-            {activeTab === 'profile' && profileData && (
-              <div>
-                <h2>Profile Information</h2>
-                <p>Last Name: {profileData.lastName}</p>
-                <p>Rating: {profileData.rating}</p>
-                <p>Friends Count: {profileData.friendOfCount}</p>
-                <p>Handle: {profileData.handle}</p>
-                <p>Rank: {profileData.rank}</p>
-                <p>Max Rating: {profileData.maxRating}</p>
-                <img src={profileData.avatar} alt={`${profileData.handle}'s avatar`} className="img-thumbnail" style={{width: '100px'}} />
-              </div>
-            )}
-
-            {activeTab === 'profile' && !profileData && (
-              <p>Please fetch your profile info by entering valid credentials in the Credentials section first.</p>
-            )}
-
-            {activeTab === 'settings' && (
-              <div>
-                <h2>Settings Section</h2>
-                <p>This section will be implemented later.</p>
-              </div>
-            )}
-
-            {errorMessage && (
-              <Alert variant="danger" className="mt-3">
-                {errorMessage}
-              </Alert>
-            )}
-          </main>
-        </Col>
-      </Row>
-    </Container>
+      {errorMessage && (
+        <Alert variant="danger" className="fixed-bottom m-3">
+          {errorMessage}
+        </Alert>
+      )}
+      {successMessage && (
+        <Alert variant="success" className="fixed-bottom m-3">
+          {successMessage}
+        </Alert>
+      )}
+    </div>
   );
 };
 

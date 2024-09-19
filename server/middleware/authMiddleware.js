@@ -1,3 +1,4 @@
+//authMiddleWare
 const jwt = require("jsonwebtoken");
 const User = require("../models/userModel");
 require("dotenv").config();
@@ -10,7 +11,6 @@ const protect = async (req, res, next) => {
 		req.headers.authorization.startsWith("Bearer")
 	) {
 		try {
-			// Get token from header
 			token = req.headers.authorization.split(" ")[1];
 
 			// Verify token
@@ -18,6 +18,7 @@ const protect = async (req, res, next) => {
 
 			// Get user from the token
 			req.user = await User.findById(decoded.id).select("-password");
+
 			if (!req.user) {
 				return res
 					.status(401)
@@ -26,15 +27,12 @@ const protect = async (req, res, next) => {
 
 			next();
 		} catch (error) {
-			console.error(error);
-			res.status(401);
-			throw new Error("Not authorized");
+			console.error("Token verification failed:", error);
+			return res.status(401).json({ message: "Not authorized" });
 		}
-	}
-
-	if (!token) {
-		res.status(401);
-		throw new Error("Not authorized, no token");
+	} else {
+		console.log("No token provided in headers:", req.headers);
+		return res.status(401).json({ message: "Not authorized, no token" });
 	}
 };
 
