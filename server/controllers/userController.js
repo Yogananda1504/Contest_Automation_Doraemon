@@ -71,28 +71,28 @@ const scheduleAutomation = (user) => {
 const performLoginAutomation = async (user) => {
     console.log('Performing login automation for:', user.cfHandle);
     const browser = await puppeteer.launch({ 
-        headless: false,
-		args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });
     const page = await browser.newPage();
 
     try {
         // Set a longer timeout for navigation
-        page.setDefaultNavigationTimeout(120000); // 2 minutes
+        page.setDefaultNavigationTimeout(300000); // 5 minutes
 
         console.log('Navigating to Codeforces login page...');
         await page.goto('https://codeforces.com/enter', {
             waitUntil: 'networkidle0',
-            timeout: 120000 // 2 minutes
+            timeout: 300000 // 5 minutes
         });
 
-        // Wait for Cloudflare challenge to be solved
-        await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 });
+        // Wait for Cloudflare challenge to be solved (if present)
+        await handleCloudflareChallenge(page);
 
         console.log('Waiting for login form...');
         await page.waitForSelector('input[name="handleOrEmail"]', { 
             visible: true,
-            timeout: 60000 // 60 seconds
+            timeout: 60000 // 1 minute
         });
 
         console.log('Login form found. Entering credentials...');
@@ -122,6 +122,26 @@ const performLoginAutomation = async (user) => {
         throw error;
     } finally {
         await browser.close();
+    }
+};
+
+// Helper function to handle Cloudflare challenge
+const handleCloudflareChallenge = async (page) => {
+    try {
+        console.log('Checking for Cloudflare challenge...');
+        const cloudflareSelector = '#cf-challenge-running';
+        const challengeExists = await page.$(cloudflareSelector);
+        
+        if (challengeExists) {
+            console.log('Cloudflare challenge detected. Waiting for it to be solved...');
+            await page.waitForFunction(() => !document.querySelector('#cf-challenge-running'), { timeout: 60000 });
+            console.log('Cloudflare challenge solved.');
+        } else {
+            console.log('No Cloudflare challenge detected.');
+        }
+    } catch (error) {
+        console.error('Error handling Cloudflare challenge:', error);
+        throw error;
     }
 };
 
