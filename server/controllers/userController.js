@@ -56,13 +56,13 @@ const scheduleAutomation = (user) => {
     let cronExpression;
     switch (user.automationPeriod) {
         case "daily":
-            cronExpression = "* * * * *"; // Run once every day at midnight
+            cronExpression = "0 0 * * *"; // Run once every day at midnight
             break;
         case "twice-daily":
-            cronExpression = "* * * * *"; // Run at midnight and noon every day
+            cronExpression = "0 0,12 * * *"; // Run at midnight and noon every day
             break;
         case "weekly":
-            cronExpression ="* * * * *"; // Run every Monday at midnight
+            cronExpression ="0 0 * * 1"; // Run every Monday at midnight
             break;
         default:
             return;
@@ -81,7 +81,7 @@ const scheduleAutomation = (user) => {
     scheduledTasks[user._id] = task;
 };
 
-// Helper function to perform login automation and contest registration
+//  function to perform login automation and contest registration
 const performLoginAndRegistration = async (user) => {
     console.log("Performing login and contest registration for:", user.cfHandle);
     const browser = await puppeteer.launch({
@@ -215,7 +215,7 @@ const registerForContests = async (page, user) => {
 };
 
 
-// Helper function to handle Cloudflare challenge
+//  function to handle Cloudflare challenge
 const handleCloudflareChallenge = async (page) => {
     try {
         console.log("Checking for Cloudflare challenge...");
@@ -240,7 +240,7 @@ const handleCloudflareChallenge = async (page) => {
     }
 };
 
-// Helper function to stop automation for a user
+//  function to stop automation for a user
 const stopAutomation = (userId) => {
     if (scheduledTasks[userId]) {
         console.log("Stopping automation for user:", userId);
