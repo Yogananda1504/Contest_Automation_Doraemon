@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const argon2 = require('argon2');
+const bcrypt = require('bcrypt');
 const User = require('../models/userModel');
 require('dotenv').config();
 
@@ -29,15 +29,9 @@ const registerUser = async (req, res) => {
             return res.status(400).json({ message: 'User already exists' });
         }
 
-        // Hash the password using Argon2 before saving
-        const hashedPassword = await argon2.hash(password);
-        console.log('Password hashed successfully:', hashedPassword);
-
-        // Ensure the hashed password starts with a $
-        if (!hashedPassword.startsWith('$')) {
-            console.error('Hashed password is not in the correct format');
-            return res.status(500).json({ message: 'Server error' });
-        }
+        // Hash the password using bcrypt before saving
+        const hashedPassword = await bcrypt.hash(password, 10);
+        console.log('Password hashed successfully', hashedPassword);
 
         // Create user
         const user = await User.create({
@@ -81,9 +75,7 @@ const loginUser = async (req, res) => {
         if (user) {
             console.log('Stored password hash:', user.password);
 
-           
-
-            const passwordMatch = await argon2.verify(user.password, password);
+            const passwordMatch = await bcrypt.compare(password, user.password);
             console.log('Password match:', passwordMatch);
 
             if (passwordMatch) {

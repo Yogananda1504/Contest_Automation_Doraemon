@@ -1,29 +1,43 @@
 const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
-const cron = require('node-cron');
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const cron = require("node-cron");
+const puppeteer = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 puppeteer.use(StealthPlugin());
 
-let scheduledTasks = {};  // To store scheduled tasks by userId
+let scheduledTasks = {}; // To store scheduled tasks by userId
 
-// @desc Automate login to Codeforces
+// @desc Automate login to Codeforces and contest registration
 // @route POST /api/users/automate
 // @access Private
 const automateLogin = async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (!user || !user.cfHandle || !user.cfPassword) {
-        return res.status(400).json({ message: "Please provide valid Codeforces credentials." });
+        return res
+            .status(400)
+            .json({ message: "Please provide valid Codeforces credentials." });
     }
 
-    const { automationPeriod } = req.body;
+    const { automationPeriod, selectedDivisions } = req.body;
+    console.log(selectedDivisions);
     if (!automationPeriod) {
-        return res.status(400).json({ message: "Please select an automation period." });
+        return res
+            .status(400)
+            .json({ message: "Please select an automation period." });
+    }
+    if (!selectedDivisions || selectedDivisions.length === 0) {
+        return res
+            .status(400)
+            .json({
+                message:
+                    "Please select at least one division for contest registration.",
+            });
     }
 
     user.automationPeriod = automationPeriod;
+    user.selectedDivisions = selectedDivisions;
     user.isAutomated = true;
     await user.save();
 
@@ -38,17 +52,17 @@ const automateLogin = async (req, res) => {
 
 // Helper function to schedule the automation
 const scheduleAutomation = (user) => {
-    console.log('Scheduling automation for:', user.cfHandle);
+    console.log("Scheduling automation for:", user.cfHandle);
     let cronExpression;
     switch (user.automationPeriod) {
-        case 'daily':
-            cronExpression = '* * * * *';  // Run once every day at midnight
+        case "daily":
+            cronExpression = "* * * * *"; // Run once every day at midnight
             break;
-        case 'twice-daily':
-            cronExpression = '* * * * *';  // Run at midnight and noon every day
+        case "twice-daily":
+            cronExpression = "* * * * *"; // Run at midnight and noon every day
             break;
-        case 'weekly':
-            cronExpression = '* * * * *';    // Run every Monday at midnight
+        case "weekly":
+            cronExpression ="* * * * *"; // Run every Monday at midnight
             break;
         default:
             return;
@@ -57,7 +71,7 @@ const scheduleAutomation = (user) => {
     // Schedule task and save reference in the scheduledTasks object
     const task = cron.schedule(cronExpression, async () => {
         try {
-            await performLoginAutomation(user);
+            await performLoginAndRegistration(user);
         } catch (error) {
             console.error(`Automation failed for user ${user.cfHandle}:`, error);
         }
@@ -67,80 +81,161 @@ const scheduleAutomation = (user) => {
     scheduledTasks[user._id] = task;
 };
 
-// Helper function to perform login automation
-const performLoginAutomation = async (user) => {
-    console.log('Performing login automation for:', user.cfHandle);
-    const browser = await puppeteer.launch({ 
+// Helper function to perform login automation and contest registration
+const performLoginAndRegistration = async (user) => {
+    console.log("Performing login and contest registration for:", user.cfHandle);
+    const browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+        ],
     });
     const page = await browser.newPage();
 
     try {
-        // Set a longer timeout for navigation
-        page.setDefaultNavigationTimeout(300000); // 5 minutes
-
-        console.log('Navigating to Codeforces login page...');
-        await page.goto('https://codeforces.com/enter', {
-            waitUntil: 'networkidle0',
-            timeout: 300000 // 5 minutes
-        });
-
-        // Wait for Cloudflare challenge to be solved (if present)
-        await handleCloudflareChallenge(page);
-
-        console.log('Waiting for login form...');
-        await page.waitForSelector('input[name="handleOrEmail"]', { 
-            visible: true,
-            timeout: 60000 // 1 minute
-        });
-
-        console.log('Login form found. Entering credentials...');
-        await page.type('input[name="handleOrEmail"]', user.cfHandle);
-        await page.type('input[name="password"]', user.cfPassword);
-        
-        console.log('Submitting login form...');
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 }),
-            page.click('input[type="submit"]')
-        ]);
-
-        console.log('Checking for login errors...');
-        const loginError = await page.$('.error');
-        if (loginError) {
-            throw new Error("Incorrect Codeforces credentials.");
-        }
-
-        console.log('Login successful for:', user.cfHandle);
+        await loginToCodeforces(page, user);
+        await registerForContests(page, user);
+        console.log(
+            "Login and contest registration completed successfully for:",
+            user.cfHandle
+        );
     } catch (error) {
-        console.error(`Error during login for ${user.cfHandle}:`, error);
-        
-        // Capture and log the page content for debugging
-        const pageContent = await page.content();
-        console.error('Page content at time of error:', pageContent);
-        
+        console.error(
+            `Error during login or registration for ${user.cfHandle}:`,
+            error
+        );
         throw error;
     } finally {
         await browser.close();
     }
 };
 
+// Helper function for Codeforces login
+const loginToCodeforces = async (page, user) => {
+    console.log("Navigating to Codeforces login page...");
+    await page.goto("https://codeforces.com/enter", {
+        waitUntil: "networkidle0",
+        timeout: 300000, // 5 minutes
+    });
+
+    // Wait for Cloudflare challenge to be solved (if present)
+    await handleCloudflareChallenge(page);
+
+    console.log("Waiting for login form...");
+    await page.waitForSelector('input[name="handleOrEmail"]', {
+        visible: true,
+        timeout: 60000, // 1 minute
+    });
+
+    console.log("Login form found. Entering credentials...");
+    await page.type('input[name="handleOrEmail"]', user.cfHandle);
+    await page.type('input[name="password"]', user.cfPassword);
+
+    console.log("Submitting login form...");
+    await Promise.all([
+        page.waitForNavigation({ waitUntil: "networkidle0", timeout: 60000 }),
+        page.click('input[type="submit"]'),
+    ]);
+
+    console.log("Checking for login errors...");
+    const loginError = await page.$(".error");
+    if (loginError) {
+        throw new Error("Incorrect Codeforces credentials.");
+    }
+
+    console.log("Login successful for:", user.cfHandle);
+};
+
+// Helper function for contest registration
+// Helper function for contest registration
+const registerForContests = async (page, user) => {
+    console.log('Checking for upcoming contests...');
+    await page.goto('https://codeforces.com/contests', { waitUntil: 'networkidle0', timeout: 60000 });
+
+    const contestsInfo = await page.evaluate((selectedDivisions) => {
+        const table = document.querySelector('.datatable table');
+        if (!table) {
+            console.error('Contests table not found');
+            return { error: 'Table not found' };
+        }
+
+        const rows = table.querySelectorAll('tr');
+        console.log('Rows found:', rows.length);
+
+        return {
+            contests: Array.from(rows).slice(1).map((row) => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length < 6) {
+                    console.error('Unexpected row structure');
+                    return null;
+                }
+                const name = cells[0].innerText.trim();
+                const startTime = cells[2].innerText.trim();
+                const registerLink = cells[5].querySelector('a.red-link');
+                const href = registerLink ? registerLink.href : null;
+                const contestNumber = registerLink ? href.split('/').pop() : 'N/A';
+                const divisionMatch = name.match(/Div\. (\d+)/);
+                return {
+                    name,
+                    startTime,
+                    contestNumber,
+                    registerLink: href,
+                    division: divisionMatch ? `Div. ${divisionMatch[1]}` : null
+                };
+            }).filter(contest => contest && contest.registerLink &&
+                (contest.division === null || selectedDivisions.includes(contest.division)))
+        };
+    }, user.selectedDivisions);
+
+    if (contestsInfo.error) {
+        console.error('Error in page evaluation:', contestsInfo.error);
+        return;
+    }
+
+    console.log(`Found ${contestsInfo.contests.length} eligible contests`);
+    for (const [index, contest] of contestsInfo.contests.entries()) {
+        console.log(`Contest ${index + 1}: ${contest.name}, Contest Number: ${contest.contestNumber}`);
+
+        if (contest.registerLink) {
+            console.log(`Navigating to registration page for contest ${contest.contestNumber}...`);
+            await page.goto(contest.registerLink, { waitUntil: 'networkidle0', timeout: 60000 });
+
+            try {
+                console.log('Clicking register button...');
+                await page.click('input.submit[type="submit"]');
+                await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 });
+                console.log(`Successfully registered for contest ${contest.name}`);
+            } catch (error) {
+                console.error(`Failed to register for contest ${contest.name}:`, error);
+            }
+        }
+    }
+};
+
+
 // Helper function to handle Cloudflare challenge
 const handleCloudflareChallenge = async (page) => {
     try {
-        console.log('Checking for Cloudflare challenge...');
-        const cloudflareSelector = '#cf-challenge-running';
+        console.log("Checking for Cloudflare challenge...");
+        const cloudflareSelector = "#cf-challenge-running";
         const challengeExists = await page.$(cloudflareSelector);
-        
+
         if (challengeExists) {
-            console.log('Cloudflare challenge detected. Waiting for it to be solved...');
-            await page.waitForFunction(() => !document.querySelector('#cf-challenge-running'), { timeout: 60000 });
-            console.log('Cloudflare challenge solved.');
+            console.log(
+                "Cloudflare challenge detected. Waiting for it to be solved..."
+            );
+            await page.waitForFunction(
+                () => !document.querySelector("#cf-challenge-running"),
+                { timeout: 60000 }
+            );
+            console.log("Cloudflare challenge solved.");
         } else {
-            console.log('No Cloudflare challenge detected.');
+            console.log("No Cloudflare challenge detected.");
         }
     } catch (error) {
-        console.error('Error handling Cloudflare challenge:', error);
+        console.error("Error handling Cloudflare challenge:", error);
         throw error;
     }
 };
@@ -148,9 +243,9 @@ const handleCloudflareChallenge = async (page) => {
 // Helper function to stop automation for a user
 const stopAutomation = (userId) => {
     if (scheduledTasks[userId]) {
-        console.log('Stopping automation for user:', userId);
-        scheduledTasks[userId].stop();  // Stop the cron job
-        delete scheduledTasks[userId];  // Remove it from the scheduled tasks list
+        console.log("Stopping automation for user:", userId);
+        scheduledTasks[userId].stop(); // Stop the cron job
+        delete scheduledTasks[userId]; // Remove it from the scheduled tasks list
     }
 };
 
@@ -184,7 +279,9 @@ const updateUserProfile = async (req, res) => {
         if (req.body.handle) {
             const existingUser = await User.findOne({ cfHandle: req.body.handle });
             if (existingUser && existingUser._id.toString() !== user._id.toString()) {
-                return res.status(400).json({ message: "Codeforces handle is already in use" });
+                return res
+                    .status(400)
+                    .json({ message: "Codeforces handle is already in use" });
             }
         }
 
@@ -192,6 +289,8 @@ const updateUserProfile = async (req, res) => {
         user.cfHandle = req.body.handle || user.cfHandle;
         user.cfPassword = req.body.password || user.cfPassword;
         user.cfApiKey = req.body.APIkey || user.cfApiKey;
+        user.selectedDivisions =
+            req.body.selectedDivisions || user.selectedDivisions;
 
         if (req.body.password) {
             user.password = req.body.password;
@@ -203,6 +302,7 @@ const updateUserProfile = async (req, res) => {
             _id: updatedUser._id,
             username: updatedUser.username,
             cfHandle: updatedUser.cfHandle,
+            selectedDivisions: updatedUser.selectedDivisions,
             token: generateToken(updatedUser._id),
         });
     } else {
@@ -223,6 +323,9 @@ const getUserProfile = async (req, res) => {
             username: user.username,
             cfHandle: user.cfHandle,
             cfApiKey: user.cfApiKey,
+            selectedDivisions: user.selectedDivisions,
+            isAutomated: user.isAutomated,
+            automationPeriod: user.automationPeriod,
         });
     } else {
         res.status(404);

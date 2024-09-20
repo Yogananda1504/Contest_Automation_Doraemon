@@ -283,46 +283,44 @@ const Home = () => {
         )}
 
         {activeTab === 'settings' && (
-          <Row>
-            <Col md={6}>
-              <h2 className="mb-4">Settings</h2>
-              <Form>
-                <Form.Group className="mb-3">
-                  <Form.Label>Contest Divisions</Form.Label>
-                  {['Div. 1', 'Div. 2', 'Div. 3', 'Div. 4'].map((div) => (
-                    <Form.Check
-                      type="checkbox"
-                      id={`division-${div}`}
-                      label={`${div} ${div === 'Div. 1' ? '(2100+)' :
-                        div === 'Div. 2' ? '(<2100)' :
-                          div === 'Div. 3' ? '(<1600)' : '(<1400)'}`}
-                      checked={selectedDivisions.includes(div)}
-                      onChange={() => handleDivisionChange(div)}
-                      key={div}
-                    />
-                  ))}
-                </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>Automation Period</Form.Label>
-                  <Form.Select
-                    value={automationPeriod}
-                    onChange={handlePeriodChange}
-                  >
-                    <option value="">Select Period</option>
-                    <option value="daily">Daily</option>
-                    <option value="twice-daily">Twice Daily</option>
-                    <option value="weekly">Weekly</option>
-                  </Form.Select>
-                </Form.Group>
-                <Button
-                  variant="primary"
-                  onClick={() => handleAutomation(!isAutomated)}
-                >
-                  {isAutomated ? 'Stop Automation' : 'Start Automation'}
-                </Button>
-              </Form>
-            </Col>
-          </Row>
+           <Row>
+           <Col md={6}>
+             <h2 className="mb-4">Settings</h2>
+             <Form>
+               <Form.Group className="mb-3">
+                 <Form.Label>Contest Divisions</Form.Label>
+                 {['Div. 1', 'Div. 2', 'Div. 3', 'Div. 4'].map((div) => (
+                   <Form.Check
+                     type="checkbox"
+                     id={`division-${div}`}
+                     label={div}
+                     checked={selectedDivisions.includes(div)}
+                     onChange={() => handleDivisionChange(div)}
+                     key={div}
+                   />
+                 ))}
+               </Form.Group>
+               <Form.Group className="mb-3">
+                 <Form.Label>Automation Period</Form.Label>
+                 <Form.Select
+                   value={automationPeriod}
+                   onChange={handlePeriodChange}
+                 >
+                   <option value="">Select Period</option>
+                   <option value="daily">Daily</option>
+                   <option value="twice-daily">Twice Daily</option>
+                   <option value="weekly">Weekly</option>
+                 </Form.Select>
+               </Form.Group>
+               <Button
+                 variant="primary"
+                 onClick={() => handleAutomation(!isAutomated)}
+               >
+                 {isAutomated ? 'Stop Automation' : 'Start Automation'}
+               </Button>
+             </Form>
+           </Col>
+         </Row>
         )}
 
         <Offcanvas
