@@ -15,6 +15,7 @@
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "express-router": "^0.0.1",
@@ -23,6 +24,7 @@
     "lru-cache": "^11.0.1",
     "mongoose": "^8.6.2",
     "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.15",
     "nodemon": "^3.1.4",
     "npmlog": "^7.0.1",
     "playwright": "^1.47.1",
@@ -31,6 +33,7 @@
     "puppeteer": "^23.4.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "validator": "^13.12.0"
   }
 }

@@ -4,24 +4,51 @@ require("dotenv").config();
 const cron = require("node-cron");
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const crypto = require("crypto");
+const CryptoJS = require("crypto-js");
+
 puppeteer.use(StealthPlugin());
 
 let scheduledTasks = {}; // To store scheduled tasks by userId
+
+// Helper function to encrypt data with a unique IV
+const encrypt = (text) => {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(process.env.ENCRYPTION_KEY), iv);
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return { iv: iv.toString('hex'), encryptedData: encrypted.toString('hex') };
+};
+
+// Helper function to decrypt data with a unique IV
+const decrypt = (text, iv) => {
+    const encryptedText = Buffer.from(text, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(process.env.ENCRYPTION_KEY), Buffer.from(iv, 'hex'));
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+};
+
+// Helper function to decrypt data from the frontend
+const decryptData = (encryptedData) => {
+    const bytes = CryptoJS.AES.decrypt(encryptedData, process.env.SECRET_KEY);
+    return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+};
 
 // @desc Automate login to Codeforces and contest registration
 // @route POST /api/users/automate
 // @access Private
 const automateLogin = async (req, res) => {
     const user = await User.findById(req.user._id);
+    console.log("Automating login for:", user);
 
-    if (!user || !user.cfHandle || !user.cfPassword) {
+    if (!user || !user.cfHandle || !user.cfPassword ) {
         return res
             .status(400)
             .json({ message: "Please provide valid Codeforces credentials." });
     }
 
-    const { automationPeriod, selectedDivisions } = req.body;
-    console.log(selectedDivisions);
+    const { automationPeriod, selectedDivisions } = decryptData(req.body.data);
     if (!automationPeriod) {
         return res
             .status(400)
@@ -31,8 +58,7 @@ const automateLogin = async (req, res) => {
         return res
             .status(400)
             .json({
-                message:
-                    "Please select at least one division for contest registration.",
+                message: "Please select at least one division for contest registration.",
             });
     }
 
@@ -62,7 +88,7 @@ const scheduleAutomation = (user) => {
             cronExpression = "0 0,12 * * *"; // Run at midnight and noon every day
             break;
         case "weekly":
-            cronExpression ="0 0 * * 1"; // Run every Monday at midnight
+            cronExpression = "0 0 * * 1"; // Run every Monday at midnight
             break;
         default:
             return;
@@ -81,7 +107,7 @@ const scheduleAutomation = (user) => {
     scheduledTasks[user._id] = task;
 };
 
-//  function to perform login automation and contest registration
+// Function to perform login automation and contest registration
 const performLoginAndRegistration = async (user) => {
     console.log("Performing login and contest registration for:", user.cfHandle);
     const browser = await puppeteer.launch({
@@ -131,7 +157,7 @@ const loginToCodeforces = async (page, user) => {
 
     console.log("Login form found. Entering credentials...");
     await page.type('input[name="handleOrEmail"]', user.cfHandle);
-    await page.type('input[name="password"]', user.cfPassword);
+    await page.type('input[name="password"]', decrypt(user.cfPassword, user.cfPasswordIv));
 
     console.log("Submitting login form...");
     await Promise.all([
@@ -149,12 +175,13 @@ const loginToCodeforces = async (page, user) => {
 };
 
 // Helper function for contest registration
-// Helper function for contest registration
 const registerForContests = async (page, user) => {
     console.log('Checking for upcoming contests...');
     await page.goto('https://codeforces.com/contests', { waitUntil: 'networkidle0', timeout: 60000 });
 
-    const contestsInfo = await page.evaluate((selectedDivisions) => {
+    const contestsInfo = await page.evaluate((userPreferences) => {
+        const { selectedDivisions, includeNonDivisionContests } = userPreferences;
+        
         const table = document.querySelector('.datatable table');
         if (!table) {
             console.error('Contests table not found');
@@ -176,18 +203,33 @@ const registerForContests = async (page, user) => {
                 const registerLink = cells[5].querySelector('a.red-link');
                 const href = registerLink ? registerLink.href : null;
                 const contestNumber = registerLink ? href.split('/').pop() : 'N/A';
-                const divisionMatch = name.match(/Div\. (\d+)/);
+                
+                const divisionMatch = name.match(/div(?:ision)?\.?\s*(\d+)/i);
+                const division = divisionMatch ? `Div. ${divisionMatch[1]}` : null;
+                
                 return {
                     name,
                     startTime,
                     contestNumber,
                     registerLink: href,
-                    division: divisionMatch ? `Div. ${divisionMatch[1]}` : null
+                    division
                 };
-            }).filter(contest => contest && contest.registerLink &&
-                (contest.division === null || selectedDivisions.includes(contest.division)))
+            }).filter(contest => {
+                if (!contest || !contest.registerLink) return false;
+                
+                if (contest.division) {
+                    return selectedDivisions.some(div => 
+                        div.toLowerCase() === contest.division.toLowerCase()
+                    );
+                } else {
+                    return includeNonDivisionContests;
+                }
+            })
         };
-    }, user.selectedDivisions);
+    }, { 
+        selectedDivisions: user.selectedDivisions, 
+        includeNonDivisionContests: user.includeNonDivisionContests 
+    });
 
     if (contestsInfo.error) {
         console.error('Error in page evaluation:', contestsInfo.error);
@@ -195,15 +237,12 @@ const registerForContests = async (page, user) => {
     }
 
     console.log(`Found ${contestsInfo.contests.length} eligible contests`);
-    for (const [index, contest] of contestsInfo.contests.entries()) {
-        console.log(`Contest ${index + 1}: ${contest.name}, Contest Number: ${contest.contestNumber}`);
-
+    for (const contest of contestsInfo.contests) {
+        console.log(`Registering for contest: ${contest.name}, Division: ${contest.division || 'N/A'}`);
+        
         if (contest.registerLink) {
-            console.log(`Navigating to registration page for contest ${contest.contestNumber}...`);
-            await page.goto(contest.registerLink, { waitUntil: 'networkidle0', timeout: 60000 });
-
             try {
-                console.log('Clicking register button...');
+                await page.goto(contest.registerLink, { waitUntil: 'networkidle0', timeout: 60000 });
                 await page.click('input.submit[type="submit"]');
                 await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 60000 });
                 console.log(`Successfully registered for contest ${contest.name}`);
@@ -214,8 +253,7 @@ const registerForContests = async (page, user) => {
     }
 };
 
-
-//  function to handle Cloudflare challenge
+// Function to handle Cloudflare challenge
 const handleCloudflareChallenge = async (page) => {
     try {
         console.log("Checking for Cloudflare challenge...");
@@ -240,7 +278,7 @@ const handleCloudflareChallenge = async (page) => {
     }
 };
 
-//  function to stop automation for a user
+// Function to stop automation for a user
 const stopAutomation = (userId) => {
     if (scheduledTasks[userId]) {
         console.log("Stopping automation for user:", userId);
@@ -275,9 +313,11 @@ const updateUserProfile = async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (user) {
+        const { username, handle, password, APIkey, selectedDivisions } = decryptData(req.body.data);
+
         // Check if the new cfHandle is already in use by another user
-        if (req.body.handle) {
-            const existingUser = await User.findOne({ cfHandle: req.body.handle });
+        if (handle) {
+            const existingUser = await User.findOne({ cfHandle: handle });
             if (existingUser && existingUser._id.toString() !== user._id.toString()) {
                 return res
                     .status(400)
@@ -285,16 +325,15 @@ const updateUserProfile = async (req, res) => {
             }
         }
 
-        user.username = req.body.username || user.username;
-        user.cfHandle = req.body.handle || user.cfHandle;
-        user.cfPassword = req.body.password || user.cfPassword;
-        user.cfApiKey = req.body.APIkey || user.cfApiKey;
-        user.selectedDivisions =
-            req.body.selectedDivisions || user.selectedDivisions;
-
-        if (req.body.password) {
-            user.password = req.body.password;
+        user.username = username || user.username;
+        user.cfHandle = handle || user.cfHandle;
+        if (password) {
+            const { iv, encryptedData } = encrypt(password); // Encrypt password
+            user.cfPassword = encryptedData;
+            user.cfPasswordIv = iv;
         }
+        user.cfApiKey = APIkey || user.cfApiKey;
+        user.selectedDivisions = selectedDivisions || user.selectedDivisions;
 
         const updatedUser = await user.save();
 

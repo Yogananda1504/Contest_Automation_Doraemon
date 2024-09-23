@@ -1,0 +1,14 @@
+@font-face {
+    font-family: 'OpenSans';
+    font-style: normal; /* Change to 'italic' if needed */
+    font-weight: 500; /* Use a numeric value corresponding to the weight */
+    font-display: swap;
+    src: url('./fonts/Open_Sans/static/OpenSans-Regular.ttf') format('truetype'); /* Corrected format */
+}
+
+/* Add additional @font-face rules for other styles and weights as needed */
+
+/* Apply the font to the body or specific elements */
+* {
+    font-family: 'OpenSans', sans-serif;
+}

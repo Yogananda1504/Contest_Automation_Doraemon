@@ -3,29 +3,29 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { Container, Row, Col, Nav, Button, Navbar, Form, Alert, Offcanvas } from 'react-bootstrap';
 import { Menu } from 'lucide-react';
+import CryptoJS from 'crypto-js';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 const API_BASE_URL = 'http://localhost:4000'; // Update this to your actual backend URL
 
 const LoadingSpinner = () => (
-  <div className="spinner-border text-primary" role="status">
-    <span className="visually-hidden">Loading...</span>
+  <div className="flex justify-center items-center">
+    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-500"></div>
   </div>
 );
 
 const Home = () => {
   const [credentials, setCredentials] = useState({
     handle: localStorage.getItem('handle') || '',
-    password: localStorage.getItem('password') || '',
-    APIkey: localStorage.getItem('APIkey') || ''
+    password: localStorage.getItem('password') || ''
   });
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [loadingPage, setLoadingPage] = useState(true);
   const [activeTab, setActiveTab] = useState(sessionStorage.getItem('activeTab') || 'credentials');
-  const [profileData, setProfileData] = useState(null);
-  const [hasToken, setHasToken] = useState(!!(localStorage.getItem('token') || sessionStorage.getItem('token')));
+  const [profileData, setProfileData] = useState(() => JSON.parse(localStorage.getItem('profileData')) || null); // Load from localStorage
+  const [hasToken, setHasToken] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [selectedDivisions, setSelectedDivisions] = useState(localStorage.getItem('selectedDivisions') ? JSON.parse(localStorage.getItem('selectedDivisions')) : []);
   const [isAutomated, setIsAutomated] = useState(false);
@@ -34,38 +34,53 @@ const Home = () => {
 
   useEffect(() => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    setHasToken(!!token);
 
-    // Load saved credentials
-    const savedCredentials = JSON.parse(localStorage.getItem('cfCredentials') || '{}');
-    setCredentials(prevCredentials => ({
-      ...prevCredentials,
-      ...savedCredentials
-    }));
+    if (token) {
+      setHasToken(true);
+      
+      // Fetch saved credentials and active tab
+      const savedCredentials = JSON.parse(localStorage.getItem('cfCredentials') || '{}');
+      setCredentials(prevCredentials => ({
+        ...prevCredentials,
+        ...savedCredentials
+      }));
 
-    // Load saved active tab from session storage
-    const savedTab = sessionStorage.getItem('activeTab') || 'credentials';
-    setActiveTab(savedTab);
+      const savedTab = sessionStorage.getItem('activeTab') || 'credentials';
+      setActiveTab(savedTab);
+    } else {
+      setHasToken(false);
+    }
 
     setLoadingPage(false);
-
-    // Fetch profile data if credentials are available
-    if (savedCredentials.handle) {
-      handleFetchProfile(savedCredentials.handle);
-    }
   }, []);
 
   useEffect(() => {
     sessionStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
+  useEffect(() => {
+    if (errorMessage || successMessage) {
+      const timer = setTimeout(() => {
+        setErrorMessage('');
+        setSuccessMessage('');
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage, successMessage]);
+
+  const encryptData = (data) => {
+    return CryptoJS.AES.encrypt(JSON.stringify(data), '3b8e2').toString();
+  };
+
   const handleAutomation = async (automate) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const encryptedData = encryptData({ automationPeriod, selectedDivisions });
       const response = await axios.post(
         `${API_BASE_URL}/api/users/${automate ? 'automate' : 'stop-automation'}`,
-        { automationPeriod, selectedDivisions },
+        { data: encryptedData },
         {
           headers: {
             'Content-Type': 'application/json',
@@ -74,7 +89,7 @@ const Home = () => {
         }
       );
       setSuccessMessage(response.data.message);
-      setIsAutomated(automate); // Toggle automation state
+      setIsAutomated(automate); 
     } catch (error) {
       setErrorMessage(error.response?.data?.message || 'An error occurred during automation.');
     } finally {
@@ -111,6 +126,7 @@ const Home = () => {
     sessionStorage.removeItem('activeTab');
     localStorage.removeItem('selectedDivisions');
     localStorage.removeItem('automationPeriod');
+    localStorage.removeItem('profileData'); // Clear profile data
     navigate('/');
   };
 
@@ -128,9 +144,10 @@ const Home = () => {
 
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const encryptedData = encryptData(credentials);
       const response = await axios.put(
         `${API_BASE_URL}/api/users/profile`,
-        credentials,
+        { data: encryptedData },
         {
           headers: {
             'Content-Type': 'application/json',
@@ -142,8 +159,10 @@ const Home = () => {
       if (response.data) {
         setSuccessMessage('Profile updated successfully');
         localStorage.setItem('cfCredentials', JSON.stringify(credentials));
+
+        // Fetching and saving profile data
         await handleFetchProfile(credentials.handle);
-        setActiveTab('profile'); // Switch to profile tab after successful update
+        setActiveTab('profile');
       }
     } catch (error) {
       setErrorMessage(error.response?.data?.message || 'An error occurred while updating credentials. Please try again.');
@@ -154,15 +173,16 @@ const Home = () => {
 
   const handleFetchProfile = async (handle) => {
     if (!hasToken) {
-      setErrorMessage('You must be logged in to fetch profile data.');
-      return;
+      return; // Skip fetching if not logged in
     }
 
     setLoading(true);
     try {
       const cfResponse = await axios.get(`https://codeforces.com/api/user.info?handles=${handle}`);
       if (cfResponse.data.status === 'OK' && cfResponse.data.result.length > 0) {
-        setProfileData(cfResponse.data.result[0]);
+        const fetchedProfile = cfResponse.data.result[0];
+        setProfileData(fetchedProfile);
+        localStorage.setItem('profileData', JSON.stringify(fetchedProfile)); // Store profile data in localStorage
         setErrorMessage('');
       } else {
         setErrorMessage('Invalid Codeforces handle. Please update your profile with a valid handle.');
@@ -176,7 +196,7 @@ const Home = () => {
 
   if (loadingPage) {
     return (
-      <Container className="d-flex justify-content-center align-items-center vh-100">
+      <Container className="d-flex justify-content-center align-items-center vh-100 bg-dark text-light">
         <LoadingSpinner />
       </Container>
     );
@@ -187,15 +207,15 @@ const Home = () => {
       <Container className="mt-5">
         <Alert variant="danger">
           You must be logged in to access this page.
-          <Link to="/" className="ms-2">Go back to home page</Link>
+          <Link to="/" className="ms-2 text-decoration-none">Go back to home page</Link>
         </Alert>
       </Container>
     );
   }
 
   return (
-    <div className="d-flex flex-column min-vh-100">
-      <Navbar bg="dark" variant="dark" className="mb-4">
+    <div className="d-flex flex-column min-vh-100 bg-light">
+      <Navbar bg="primary" variant="dark" className="mb-4">
         <Container fluid>
           <Button
             variant="outline-light"
@@ -205,7 +225,7 @@ const Home = () => {
             <Menu size={24} />
           </Button>
           <Navbar.Brand href="#home">Codeforces Auto Register</Navbar.Brand>
-          <Button variant="outline-light" onClick={handleLogout}>Logout</Button>
+          <Button variant="danger" onClick={handleLogout}>Logout</Button>
         </Container>
       </Navbar>
 
@@ -213,8 +233,8 @@ const Home = () => {
         {activeTab === 'credentials' && (
           <Row className="justify-content-md-center">
             <Col md={6}>
-              <h2 className="mb-4">Enter Credentials</h2>
-              <Form onSubmit={handleSubmitCredentials}>
+              <h2 className="mb-4 text-primary">Enter Credentials</h2>
+              <Form onSubmit={handleSubmitCredentials} className="p-4 rounded shadow bg-white">
                 <Form.Group className="mb-3" controlId="handle">
                   <Form.Label>Codeforces Handle</Form.Label>
                   <Form.Control
@@ -239,19 +259,7 @@ const Home = () => {
                   />
                 </Form.Group>
 
-                <Form.Group className="mb-3" controlId="APIkey">
-                  <Form.Label>Codeforces API Key</Form.Label>
-                  <Form.Control
-                    type="password"
-                    name="APIkey"
-                    placeholder="Enter your API key"
-                    value={credentials.APIkey}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </Form.Group>
-
-                <Button variant="primary" type="submit" disabled={loading}>
+                <Button variant="primary" type="submit" disabled={loading} className="w-100">
                   {loading ? <LoadingSpinner /> : 'Update'}
                 </Button>
               </Form>
@@ -262,9 +270,9 @@ const Home = () => {
         {activeTab === 'profile' && (
           <Row>
             <Col md={6}>
-              <h2 className="mb-4">Profile Information</h2>
+              <h2 className="mb-4 text-primary">Profile Information</h2>
               {profileData ? (
-                <>
+                <div className="p-3 rounded shadow bg-white">
                   <img src={profileData.avatar} alt={`${profileData.handle}'s avatar`} className="img-thumbnail mb-3" style={{ width: '100px' }} />
                   <p><strong>Handle:</strong> {profileData.handle}</p>
                   <p><strong>Last Name:</strong> {profileData.lastName}</p>
@@ -272,7 +280,7 @@ const Home = () => {
                   <p><strong>Rank:</strong> {profileData.rank}</p>
                   <p><strong>Max Rating:</strong> {profileData.maxRating}</p>
                   <p><strong>Friends Count:</strong> {profileData.friendOfCount}</p>
-                </>
+                </div>
               ) : (
                 <Alert variant="info">
                   No profile data available. Please enter valid credentials in the Credentials section and update your profile.
@@ -283,44 +291,45 @@ const Home = () => {
         )}
 
         {activeTab === 'settings' && (
-           <Row>
-           <Col md={6}>
-             <h2 className="mb-4">Settings</h2>
-             <Form>
-               <Form.Group className="mb-3">
-                 <Form.Label>Contest Divisions</Form.Label>
-                 {['Div. 1', 'Div. 2', 'Div. 3', 'Div. 4'].map((div) => (
-                   <Form.Check
-                     type="checkbox"
-                     id={`division-${div}`}
-                     label={div}
-                     checked={selectedDivisions.includes(div)}
-                     onChange={() => handleDivisionChange(div)}
-                     key={div}
-                   />
-                 ))}
-               </Form.Group>
-               <Form.Group className="mb-3">
-                 <Form.Label>Automation Period</Form.Label>
-                 <Form.Select
-                   value={automationPeriod}
-                   onChange={handlePeriodChange}
-                 >
-                   <option value="">Select Period</option>
-                   <option value="daily">Daily</option>
-                   <option value="twice-daily">Twice Daily</option>
-                   <option value="weekly">Weekly</option>
-                 </Form.Select>
-               </Form.Group>
-               <Button
-                 variant="primary"
-                 onClick={() => handleAutomation(!isAutomated)}
-               >
-                 {isAutomated ? 'Stop Automation' : 'Start Automation'}
-               </Button>
-             </Form>
-           </Col>
-         </Row>
+          <Row>
+            <Col md={6}>
+              <h2 className="mb-4 text-primary">Settings</h2>
+              <Form className="p-4 rounded shadow bg-white">
+                <Form.Group className="mb-3">
+                  <Form.Label>Contest Divisions</Form.Label>
+                  {['Div. 1', 'Div. 2', 'Div. 3', 'Div. 4'].map((div) => (
+                    <Form.Check
+                      type="checkbox"
+                      id={`division-${div}`}
+                      label={div}
+                      checked={selectedDivisions.includes(div)}
+                      onChange={() => handleDivisionChange(div)}
+                      key={div}
+                    />
+                  ))}
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Automation Period</Form.Label>
+                  <Form.Select
+                    value={automationPeriod}
+                    onChange={handlePeriodChange}
+                  >
+                    <option value="">Select Period</option>
+                    <option value="daily">Daily</option>
+                    <option value="twice-daily">Twice Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </Form.Select>
+                </Form.Group>
+                <Button
+                  variant={isAutomated ? 'danger' : 'success'}
+                  onClick={() => handleAutomation(!isAutomated)}
+                  className="w-100"
+                >
+                  {isAutomated ? 'Stop Automation' : 'Start Automation'}
+                </Button>
+              </Form>
+            </Col>
+          </Row>
         )}
 
         <Offcanvas
@@ -336,18 +345,21 @@ const Home = () => {
               <Nav.Link
                 active={activeTab === 'credentials'}
                 onClick={() => setActiveTab('credentials')}
+                className="text-dark"
               >
                 Credentials
               </Nav.Link>
               <Nav.Link
                 active={activeTab === 'profile'}
                 onClick={() => setActiveTab('profile')}
+                className="text-dark"
               >
                 Profile
               </Nav.Link>
               <Nav.Link
                 active={activeTab === 'settings'}
                 onClick={() => setActiveTab('settings')}
+                className="text-dark"
               >
                 Settings
               </Nav.Link>
