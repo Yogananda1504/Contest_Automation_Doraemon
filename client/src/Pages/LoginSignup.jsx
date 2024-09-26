@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff, Mail } from 'lucide-react';
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
+import doraemonGif from '../assets/doraemon.gif'; // Adjust the path as necessary
+import doraemonGif2 from '../assets/doraemon2.gif'; // Adjust the path as necessary
 
 const API_BASE_URL = 'http://localhost:4000';
 
@@ -46,23 +48,14 @@ export default function LoginSignup() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoadingPage(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    setTimeout(() => {
       if (token) {
         navigate('/home');
       } else {
         setLoadingPage(false);
       }
-    };
-
-    checkAuth();
+    }, 2000); // 2 seconds delay to simulate loading
   }, [navigate]);
 
   const toggleForm = () => {
@@ -122,7 +115,9 @@ export default function LoginSignup() {
         setSuccess('Password reset link has been sent to your email!');
         setIsEmailSent(true);
       } else {
-        setSuccess('Registration successful! Please check your email to verify your account.');
+        // Registration successful, redirect to verification page
+        setSuccess('Verification email sent! Redirecting to verification page...');
+        setTimeout(() => navigate(`/verify-email/${response.data.userId}`), 3000);
       }
     } catch (error) {
       setError(error.response?.data.message || 'An unexpected error occurred. Please try again later.');
@@ -132,9 +127,12 @@ export default function LoginSignup() {
   };
 
   if (loadingPage) {
+    const gifs = [doraemonGif, doraemonGif2];
+    const randomGif = gifs[Math.floor(Math.random() * gifs.length)];
+
     return (
       <div className="min-h-screen flex items-center justify-center w-full h-full bg-gradient-to-br from-indigo-100 to-purple-100">
-        <LoadingSpinner />
+      <img src={randomGif} alt="Loading..." className="w-32 h-32" />
       </div>
     );
   }

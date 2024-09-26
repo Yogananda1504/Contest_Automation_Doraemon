@@ -30,9 +30,11 @@ const userSchema = mongoose.Schema(
     resetPasswordExpire: Date,
     cfHandle: String,
     cfPassword: String,
+    cfPasswordIv: String, // Added field for storing the IV
     cfApiKey: String,
     selectedDivisions: [String],
     automationPeriod: String,
+    includeNonDivisionContests: Boolean,
     isAutomated: {
       type: Boolean,
       default: false,

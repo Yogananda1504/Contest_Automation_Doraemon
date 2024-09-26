@@ -9,11 +9,11 @@ const App = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<LoginSignup />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/verify-email/:token" element={<Verify />} />
-        <Route path="/reset-password/:token" element={<Forgotpassword />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route exact path="/" element={<LoginSignup />} />
+        <Route exact path="/home" element={<Home />} />
+        <Route exact path="/verify-email" element={<Verify />} />
+        <Route exact path="/reset-password/:token" element={<Forgotpassword />} />
+        <Route exact path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

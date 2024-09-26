@@ -82,13 +82,13 @@ const scheduleAutomation = (user) => {
     let cronExpression;
     switch (user.automationPeriod) {
         case "daily":
-            cronExpression = "0 0 * * *"; // Run once every day at midnight
+            cronExpression = "* * * * *"; // Run once every day at midnight
             break;
         case "twice-daily":
-            cronExpression = "0 0,12 * * *"; // Run at midnight and noon every day
+            cronExpression = "* * * * *"; // Run at midnight and noon every day
             break;
         case "weekly":
-            cronExpression = "0 0 * * 1"; // Run every Monday at midnight
+            cronExpression = "* * * * *"; // Run every Monday at midnight
             break;
         default:
             return;

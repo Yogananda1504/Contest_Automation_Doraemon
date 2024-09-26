@@ -6,7 +6,7 @@ import { Menu } from 'lucide-react';
 import CryptoJS from 'crypto-js';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-const API_BASE_URL = 'http://localhost:4000'; // Update this to your actual backend URL
+const API_BASE_URL = 'http://localhost:4000';
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center">
@@ -17,14 +17,14 @@ const LoadingSpinner = () => (
 const Home = () => {
   const [credentials, setCredentials] = useState({
     handle: localStorage.getItem('handle') || '',
-    password: localStorage.getItem('password') || ''
+    password: ''
   });
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [loadingPage, setLoadingPage] = useState(true);
   const [activeTab, setActiveTab] = useState(sessionStorage.getItem('activeTab') || 'credentials');
-  const [profileData, setProfileData] = useState(() => JSON.parse(localStorage.getItem('profileData')) || null); // Load from localStorage
+  const [profileData, setProfileData] = useState(() => JSON.parse(sessionStorage.getItem('profileData')) || null);
   const [hasToken, setHasToken] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [selectedDivisions, setSelectedDivisions] = useState(localStorage.getItem('selectedDivisions') ? JSON.parse(localStorage.getItem('selectedDivisions')) : []);
@@ -34,11 +34,9 @@ const Home = () => {
 
   useEffect(() => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-
     if (token) {
       setHasToken(true);
-      
-      // Fetch saved credentials and active tab
+
       const savedCredentials = JSON.parse(localStorage.getItem('cfCredentials') || '{}');
       setCredentials(prevCredentials => ({
         ...prevCredentials,
@@ -50,7 +48,6 @@ const Home = () => {
     } else {
       setHasToken(false);
     }
-
     setLoadingPage(false);
   }, []);
 
@@ -64,7 +61,6 @@ const Home = () => {
         setErrorMessage('');
         setSuccessMessage('');
       }, 5000);
-
       return () => clearTimeout(timer);
     }
   }, [errorMessage, successMessage]);
@@ -89,7 +85,7 @@ const Home = () => {
         }
       );
       setSuccessMessage(response.data.message);
-      setIsAutomated(automate); 
+      setIsAutomated(automate);
     } catch (error) {
       setErrorMessage(error.response?.data?.message || 'An error occurred during automation.');
     } finally {
@@ -103,7 +99,9 @@ const Home = () => {
       ...prevCredentials,
       [name]: value
     }));
-    localStorage.setItem(`${name}`, value);
+    if (name !== 'password') {
+      localStorage.setItem(`${name}`, value);
+    }
   };
 
   const handleDivisionChange = (division) => {
@@ -120,13 +118,8 @@ const Home = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('token');
-    localStorage.removeItem('cfCredentials');
-    sessionStorage.removeItem('activeTab');
-    localStorage.removeItem('selectedDivisions');
-    localStorage.removeItem('automationPeriod');
-    localStorage.removeItem('profileData'); // Clear profile data
+    localStorage.clear();
+    sessionStorage.clear();
     navigate('/');
   };
 
@@ -158,10 +151,11 @@ const Home = () => {
 
       if (response.data) {
         setSuccessMessage('Profile updated successfully');
-        localStorage.setItem('cfCredentials', JSON.stringify(credentials));
 
-        // Fetching and saving profile data
+        localStorage.setItem('handle', credentials.handle);
+
         await handleFetchProfile(credentials.handle);
+
         setActiveTab('profile');
       }
     } catch (error) {
@@ -173,7 +167,7 @@ const Home = () => {
 
   const handleFetchProfile = async (handle) => {
     if (!hasToken) {
-      return; // Skip fetching if not logged in
+      return;
     }
 
     setLoading(true);
@@ -182,7 +176,7 @@ const Home = () => {
       if (cfResponse.data.status === 'OK' && cfResponse.data.result.length > 0) {
         const fetchedProfile = cfResponse.data.result[0];
         setProfileData(fetchedProfile);
-        localStorage.setItem('profileData', JSON.stringify(fetchedProfile)); // Store profile data in localStorage
+        sessionStorage.setItem('profileData', JSON.stringify(fetchedProfile)); // Store profile data in session storage
         setErrorMessage('');
       } else {
         setErrorMessage('Invalid Codeforces handle. Please update your profile with a valid handle.');
@@ -275,7 +269,6 @@ const Home = () => {
                 <div className="p-3 rounded shadow bg-white">
                   <img src={profileData.avatar} alt={`${profileData.handle}'s avatar`} className="img-thumbnail mb-3" style={{ width: '100px' }} />
                   <p><strong>Handle:</strong> {profileData.handle}</p>
-                  <p><strong>Last Name:</strong> {profileData.lastName}</p>
                   <p><strong>Rating:</strong> {profileData.rating}</p>
                   <p><strong>Rank:</strong> {profileData.rank}</p>
                   <p><strong>Max Rating:</strong> {profileData.maxRating}</p>
@@ -297,7 +290,7 @@ const Home = () => {
               <Form className="p-4 rounded shadow bg-white">
                 <Form.Group className="mb-3">
                   <Form.Label>Contest Divisions</Form.Label>
-                  {['Div. 1', 'Div. 2', 'Div. 3', 'Div. 4'].map((div) => (
+                  {['Div. 1', 'Div. 2', 'Div. 3', 'Div. 4', 'Also other'].map((div) => (
                     <Form.Check
                       type="checkbox"
                       id={`division-${div}`}
